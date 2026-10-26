@@ -1,0 +1,1241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bingo">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#f3f4f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0f1a" media="(prefers-color-scheme: dark)">
+<title>Bingo Caller</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+:root {
+  --bg: #f3f4f8; --surface: #ffffff; --surface-2: #e7e9ef; --text: #12151c; --muted: #5c6371; --line: #d8dbe3;
+  --accent: #2563eb; --accent-fg: #fff; --danger: #d92d20; --win: #16a34a;
+  --cell-bg: #e3e6ed; --cell-fg: #3b4250;
+  --off-bg: #eef0f4; --off-bg2: #e6e8ee; --off-fg: #b2b7c2;
+  --called-off-bg: #8b93a3; --called-off-fg: #f4f5f8;
+  --just-ring: #12151c;
+  --B: #1f74db; --I: #df3437; --N: #7c4ddb; --G: #219a4a; --O: #f0b000;
+  --B-ink: #1a5fb4; --I-ink: #c01c28; --N-ink: #613583; --G-ink: #1a7f3c; --O-ink: #9a6b00;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 4px 14px rgba(16, 24, 40, .06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0f1a; --surface: #141a28; --surface-2: #1e2638; --text: #eef1f7; --muted: #97a0b3; --line: #273047;
+    --accent: #3b82f6;
+    --cell-bg: #212a3d; --cell-fg: #b3bccc;
+    --off-bg: #10141f; --off-bg2: #0c1019; --off-fg: #394155;
+    --called-off-bg: #4b5366; --called-off-fg: #cfd4de;
+    --just-ring: #ffffff;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .25);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
+  -webkit-text-size-adjust: 100%;
+}
+input, textarea { -webkit-user-select: text; user-select: text; }
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; touch-action: manipulation; padding: 0; }
+button:disabled { opacity: .4; cursor: default; }
+svg.i { width: 1.25em; height: 1.25em; fill: currentColor; flex: none; }
+svg.i .s { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 10px 18px; border-radius: 12px;
+  background: var(--surface-2); font-weight: 600; white-space: nowrap;
+}
+.btn.primary { background: var(--accent); color: var(--accent-fg); }
+.btn.win { background: var(--win); color: #fff; }
+.btn.danger { color: var(--danger); }
+.btn.big { min-height: 56px; padding: 14px 28px; font-size: 19px; border-radius: 16px; }
+.btn.ghost { background: transparent; }
+.iconbtn { display: inline-grid; place-items: center; min-width: 44px; min-height: 44px; border-radius: 12px; background: var(--surface-2); }
+.iconbtn[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+
+/* ---------- Balls ---------- */
+.L0 { --c: var(--B); --ink: var(--B-ink); --cfg: #fff; }
+.L1 { --c: var(--I); --ink: var(--I-ink); --cfg: #fff; }
+.L2 { --c: var(--N); --ink: var(--N-ink); --cfg: #fff; }
+.L3 { --c: var(--G); --ink: var(--G-ink); --cfg: #fff; }
+.L4 { --c: var(--O); --ink: var(--O-ink); --cfg: #2a2000; }
+.ball {
+  --s: 60px; width: var(--s); height: var(--s); flex: none; border-radius: 50%;
+  container-type: inline-size; display: grid; place-items: center;
+  background:
+    radial-gradient(circle at 33% 27%, rgba(255,255,255,.8) 0, rgba(255,255,255,0) 26%),
+    radial-gradient(circle at 50% 42%, var(--c) 0 50%, color-mix(in srgb, var(--c) 55%, #000) 100%);
+  box-shadow: 0 calc(var(--s) * .05) calc(var(--s) * .14) rgba(0,0,0,.32), inset 0 calc(var(--s) * -.04) calc(var(--s) * .08) rgba(0,0,0,.3);
+}
+.ball.empty { --ink: var(--muted); background: none; box-shadow: none; border: 2px dashed var(--line); }
+.ball .face {
+  width: 60%; height: 60%; border-radius: 50%; background: #fff; color: #111;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.12);
+}
+.ball.empty .face { background: none; box-shadow: none; color: var(--muted); }
+.ball .bl { font-size: 14cqw; font-weight: 800; color: var(--ink); }
+.ball .bn { font-size: 27cqw; font-weight: 900; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.ball.fly {
+  --s: min(64vmin, 480px); position: fixed; left: 50%; top: 50%;
+  margin: calc(var(--s) / -2) 0 0 calc(var(--s) / -2); z-index: 60; pointer-events: none; will-change: transform;
+}
+.flyback { position: fixed; inset: 0; z-index: 59; background: rgba(5, 8, 15, .45); pointer-events: none; }
+
+/* ---------- Pattern previews ---------- */
+.pat { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; width: 100px; flex: none; }
+.pat b { font-size: 10px; text-align: center; font-weight: 800; color: var(--muted); line-height: 1.4; }
+.pat i { aspect-ratio: 1; border-radius: 3px; background: var(--surface-2); position: relative; transition: background .25s; }
+.pat i.f { background: var(--accent); }
+.pat i.free::after { content: "★"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 9px; font-style: normal; color: var(--muted); }
+.pat i.f.free::after { color: #fff; }
+.pat.sm { width: 56px; gap: 2px; } .pat.sm b { display: none; } .pat.sm i { border-radius: 2px; } .pat.sm i.free::after { font-size: 6px; }
+.pat.lg { width: 200px; gap: 5px; } .pat.lg b { font-size: 16px; } .pat.lg i { border-radius: 5px; } .pat.lg i.free::after { font-size: 16px; }
+
+/* ---------- Pages (home / session / picker) ---------- */
+.page {
+  max-width: 980px; margin: 0 auto;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+.phead { display: flex; align-items: center; gap: 12px; min-height: 52px; margin-bottom: 8px; }
+.phead .grow { flex: 1; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand .ball { --s: 44px; }
+h1 { font-size: 28px; margin: 0; letter-spacing: -.01em; }
+h2 { font-size: 20px; margin: 0 0 12px; }
+.back { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-weight: 600; min-height: 44px; min-width: 0; }
+.back span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub { color: var(--muted); }
+.titlerow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 18px; }
+.titlerow h1 { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.list { display: grid; gap: 10px; }
+.row {
+  display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 16px;
+  background: var(--surface); box-shadow: var(--shadow);
+}
+.row .grow { flex: 1; min-width: 0; }
+.row .t { font-weight: 650; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .chev { color: var(--muted); }
+.badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--surface-2); color: var(--muted); vertical-align: 2px; margin-left: 6px; }
+.badge.live { background: var(--win); color: #fff; }
+.badge.paused { background: var(--O); color: #2a2000; }
+.empty { text-align: center; padding: 48px 16px; color: var(--muted); }
+.empty .ball { --s: 96px; margin: 0 auto 16px; }
+.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px; }
+.pcard {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;
+  padding: 18px 12px 14px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); width: 100%;
+}
+.pcard .pat { width: 112px; }
+.pcard .nm { font-weight: 700; font-size: 16px; }
+.pcard .ds { font-size: 13px; color: var(--muted); margin-top: -6px; }
+.pwrap { position: relative; display: flex; }
+.pwrap .edit { position: absolute; right: 6px; bottom: 6px; background: transparent; color: var(--muted); }
+.pcard.add { border: 2px dashed var(--line); background: transparent; box-shadow: none; justify-content: center; color: var(--accent); font-weight: 700; min-height: 190px; }
+.pcard.add .plus { font-size: 40px; line-height: 1; }
+.section-h { margin: 26px 0 10px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+
+/* ---------- Game screen ---------- */
+.game {
+  height: 100vh; height: 100dvh; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto auto; gap: 12px;
+  padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+.gbar { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+.gbar .back { flex: 1 1 0; }
+.gtitle { flex: 0 1 auto; text-align: center; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gtitle .gnum { color: var(--muted); margin-right: 4px; }
+.clock { flex: 1 1 0; text-align: right; font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.clock.paused { animation: blink 1.2s steps(2, jump-none) infinite; color: var(--muted); }
+.clock .tag { font-size: 12px; font-weight: 800; letter-spacing: .08em; vertical-align: 6px; margin-right: 8px; color: var(--O-ink); }
+@keyframes blink { 50% { opacity: .35; } }
+
+.stage { display: flex; align-items: center; gap: clamp(12px, 2.5vw, 28px); min-width: 0; }
+.cur .ball { --s: clamp(92px, 17vh, 168px); }
+.meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.count { color: var(--muted); font-size: 15px; }
+.count b { color: var(--text); font-size: 34px; font-weight: 800; margin-right: 4px; font-variant-numeric: tabular-nums; }
+.recent { display: flex; gap: clamp(6px, 1vw, 12px); min-height: clamp(36px, 7vh, 60px); overflow: hidden; }
+.recent .ball { --s: clamp(36px, 7vh, 60px); }
+.recent .ball:nth-child(n+3) { opacity: .8; } .recent .ball:nth-child(n+4) { opacity: .6; } .recent .ball:nth-child(n+5) { opacity: .45; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 16px; height: 16px; border-radius: 4px; display: inline-block; background: var(--cell-bg); }
+.sw.on { background: var(--B); }
+.sw.just { background: var(--B); box-shadow: 0 0 0 2px var(--just-ring); }
+.sw.off { background: repeating-linear-gradient(135deg, var(--off-bg2) 0 3px, var(--off-bg) 3px 6px); box-shadow: inset 0 0 0 1px var(--line); }
+.sw.offon { background: var(--called-off-bg); }
+.patbox { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--muted); max-width: 160px; text-align: center; }
+.patbox .pat { width: clamp(84px, 15vh, 140px); }
+
+.boardwrap { position: relative; min-height: 0; container-type: size; }
+.board {
+  --g: clamp(3px, .55cqw, 8px);
+  --cell: min(calc((100cqw - 15 * var(--g)) / 16), calc((100cqh - 4 * var(--g)) / 5));
+  height: 100%; display: grid; gap: var(--g); justify-content: center; align-content: center;
+  grid-template-columns: repeat(16, var(--cell)); grid-template-rows: repeat(5, var(--cell));
+}
+.board > * { grid-row: var(--L); grid-column: var(--K); }
+.hdr { display: grid; place-items: center; font-size: calc(var(--cell) * .64); font-weight: 900; color: var(--c); }
+.hdr.off { opacity: .3; }
+.cell {
+  display: grid; place-items: center; border-radius: 22%;
+  font-size: calc(var(--cell) * .44); font-weight: 750; font-variant-numeric: tabular-nums;
+  background: var(--cell-bg); color: var(--cell-fg);
+  transition: background-color .35s, color .35s, box-shadow .35s, transform .35s;
+}
+.cell.off { background: repeating-linear-gradient(135deg, var(--off-bg2) 0 6px, var(--off-bg) 6px 12px); color: var(--off-fg); }
+.cell.on { background: var(--c); color: var(--cfg); }
+.cell.off.on { background: var(--called-off-bg); color: var(--called-off-fg); }
+.cell.just {
+  position: relative; z-index: 2; transform: scale(1.14);
+  box-shadow: 0 0 0 calc(var(--cell) * .07) var(--just-ring), 0 0 calc(var(--cell) * .55) calc(var(--cell) * .08) var(--c);
+  animation: glow 1.4s ease-in-out infinite alternate;
+}
+.cell.off.just { box-shadow: 0 0 0 calc(var(--cell) * .07) var(--just-ring), 0 0 calc(var(--cell) * .45) var(--called-off-bg); }
+.cell.pop { animation: pop .55s cubic-bezier(.2, 1.6, .4, 1), glow 1.4s .55s ease-in-out infinite alternate; }
+@keyframes pop { 0% { transform: scale(.6); } 100% { transform: scale(1.14); } }
+@keyframes glow { to { filter: brightness(1.18); } }
+.board.scrubbing .cell.just { animation: none; }
+
+.overlay {
+  position: absolute; inset: 0; z-index: 5; display: none; place-items: center; padding: 12px;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+}
+.overlay.show { display: grid; }
+.ocard {
+  background: var(--surface); border-radius: 22px; box-shadow: 0 20px 60px rgba(0,0,0,.25);
+  padding: 24px 28px; display: flex; align-items: center; gap: 28px; max-width: 100%; max-height: 100%; overflow: auto;
+}
+.ocard .txt { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-width: 0; }
+.ocard h2 { font-size: 30px; margin: 0; letter-spacing: -.01em; }
+.ocard .note { color: var(--muted); max-width: 340px; }
+.ocard .btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.ocard .kicker { font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+
+.controls {
+  position: relative; display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap;
+  padding: 10px; border-radius: 18px; background: var(--surface); box-shadow: var(--shadow);
+}
+.controls .grp { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.controls .spacer { flex: 1; }
+.controls .summary { font-weight: 650; padding: 0 6px; }
+.seg { display: inline-flex; padding: 3px; border-radius: 12px; background: var(--surface-2); }
+.seg button { min-height: 38px; padding: 0 16px; border-radius: 9px; font-weight: 650; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+.interval { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.interval input { width: clamp(90px, 14vw, 160px); accent-color: var(--accent); }
+.interval output { min-width: 3ch; font-weight: 700; color: var(--text); }
+.confirm {
+  position: absolute; inset: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between;
+  gap: 8px 16px; flex-wrap: wrap; padding: 8px 10px 8px 18px; border-radius: inherit;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  box-shadow: inset 0 0 0 2px var(--win); animation: rise .18s ease-out;
+}
+.confirm .ctext { display: flex; flex-direction: column; min-width: 0; }
+.confirm .ctext b { font-size: 20px; color: var(--win); }
+.confirm .ctext span { font-size: 14px; color: var(--muted); }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+.summary .kicker { color: var(--win); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; margin-right: 6px; }
+.autobar { position: absolute; left: 14px; right: 14px; top: 0; height: 3px; border-radius: 2px; overflow: hidden; pointer-events: none; }
+.autobar i { display: block; height: 100%; width: 0; background: var(--accent); }
+
+.scrub { display: flex; align-items: center; gap: 8px; }
+.scrub input { flex: 1; min-width: 60px; accent-color: var(--accent); height: 28px; }
+.scrub .iconbtn { min-width: 40px; min-height: 40px; background: transparent; color: var(--muted); }
+.scrub .live { color: var(--accent); font-weight: 700; font-size: 14px; padding: 0 10px; min-height: 36px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.scrubinfo { font-size: 13px; color: var(--muted); min-width: 150px; text-align: right; font-variant-numeric: tabular-nums; }
+.scrubinfo b { color: var(--text); }
+
+/* Short screens (phones in landscape) */
+@media (max-height: 560px) {
+  .game { gap: 8px; }
+  .stage .recent, .stage .legend { display: none; }
+  .cur .ball { --s: 64px; }
+  .patbox .pat { width: 64px; } .patbox span { display: none; }
+  .clock { font-size: 22px; }
+  .count b { font-size: 24px; }
+}
+/* Phones in portrait: numbers run down the screen in five B-I-N-G-O columns, and the page scrolls. */
+@media (max-width: 640px) and (orientation: portrait) {
+  .game { height: auto; min-height: 100dvh; grid-template-rows: none; }
+  .gtitle .gnum { display: none; }
+  .clock { font-size: 24px; }
+  .stage { gap: 12px; }
+  .cur .ball { --s: 96px; }
+  .recent .ball { --s: 38px; } .recent { min-height: 38px; }
+  .recent .ball:nth-child(n+5) { display: none; }
+  .legend { font-size: 12px; gap: 4px 10px; }
+  .patbox .pat { width: 64px; } .patbox span { display: none; }
+  .boardwrap { container-type: normal; min-height: 360px; }
+  .board { --g: 5px; --cell: 34px; height: auto; grid-template-columns: repeat(5, 1fr); grid-template-rows: none; grid-auto-rows: 34px; }
+  .board > * { grid-row: var(--K); grid-column: var(--L); }
+  .hdr { font-size: 26px; }
+  .cell { font-size: 17px; border-radius: 9px; }
+  .cell.just { transform: scale(1.08); }
+  @keyframes pop { 0% { transform: scale(.6); } 100% { transform: scale(1.08); } }
+  .ocard { flex-direction: column; padding: 20px; gap: 16px; text-align: center; }
+  .ocard .txt { align-items: center; }
+  .ocard .pat.lg { width: 150px; }
+  .controls .spacer { display: none; }
+  .controls { justify-content: center; }
+  .scrubinfo { min-width: 0; display: none; }
+  .confirm { justify-content: center; text-align: center; padding: 10px; }
+  h1 { font-size: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cell, .pat i { transition: none; }
+  .cell.just, .cell.pop, .clock.paused { animation: none; }
+}
+
+/* ---------- Dialogs, toasts ---------- */
+dialog.modal {
+  border: 0; padding: 0; border-radius: 20px; background: var(--surface); color: var(--text);
+  width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); box-shadow: 0 24px 70px rgba(0,0,0,.35);
+}
+dialog.modal::backdrop { background: rgba(5, 8, 15, .5); }
+dialog.modal form { padding: 22px; display: flex; flex-direction: column; gap: 14px; }
+dialog.modal h2 { margin: 0; }
+dialog.modal p { margin: 0; color: var(--muted); }
+.mbtns { display: flex; flex-direction: row-reverse; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.mbtns .btn { flex: 1 1 auto; }
+.mbtns .btn.danger.left { order: 9; flex: 0 1 auto; margin-right: auto; }
+.field { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 14px; color: var(--muted); }
+.field input {
+  font: inherit; font-size: 17px; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 12px; padding: 12px 14px; outline: none;
+}
+.field select {
+  font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 12px; padding: 12px 14px; outline: none; width: 100%;
+}
+.field input:focus, .field select:focus { border-color: var(--accent); }
+.switchrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; }
+.switch {
+  appearance: none; -webkit-appearance: none; margin: 0; flex: none; cursor: pointer;
+  width: 51px; height: 31px; border-radius: 99px; background: var(--surface-2); position: relative; transition: background .2s;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.switch::before {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .2s;
+}
+.switch:checked { background: var(--win); box-shadow: none; }
+.switch:checked::before { transform: translateX(20px); }
+.hint { font-size: 14px; }
+.stepper { display: inline-flex; align-items: center; gap: 6px; }
+.stepper .iconbtn { font-size: 24px; font-weight: 600; line-height: 1; }
+.stepper output { min-width: 4.5ch; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+.ped { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: min(100%, 320px); margin: 0 auto; }
+.ped b { text-align: center; font-weight: 900; font-size: 20px; }
+.ped button { aspect-ratio: 1; border-radius: 10px; background: var(--surface-2); font-size: 22px; color: var(--muted); }
+.ped button.f { background: var(--accent); color: #fff; }
+.err { color: var(--danger) !important; font-weight: 600; min-height: 1.4em; }
+
+#toast {
+  position: fixed; left: 50%; bottom: max(20px, env(safe-area-inset-bottom)); transform: translate(-50%, 140%);
+  z-index: 80; display: flex; align-items: center; gap: 14px; padding: 10px 10px 10px 18px; border-radius: 16px;
+  background: #1c2333; color: #fff; box-shadow: 0 10px 30px rgba(0,0,0,.3); transition: transform .3s; max-width: calc(100vw - 32px);
+}
+#toast.show { transform: translate(-50%, 0); }
+#toast .btn { min-height: 38px; padding: 6px 14px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" role="status"><span id="toast-msg"></span><button type="button" class="btn primary" id="toast-btn" hidden></button></div>
+<script>
+'use strict';
+
+// ---- MT19937 START ----
+/** Mersenne Twister (MT19937), a port of Matsumoto & Nishimura's mt19937ar.c. Period 2^19937−1. */
+class MT19937 {
+  constructor(seed) {
+    this.mt = new Uint32Array(624);
+    this.mti = 625;
+    if (seed != null && typeof seed === 'object') this.initByArray(seed);
+    else this.initGenrand(seed == null ? 5489 : seed >>> 0);
+  }
+  initGenrand(s) {
+    const mt = this.mt;
+    mt[0] = s >>> 0;
+    for (let i = 1; i < 624; i++) {
+      const p = mt[i - 1] ^ (mt[i - 1] >>> 30);
+      mt[i] = (Math.imul(1812433253, p) + i) >>> 0;
+    }
+    this.mti = 624;
+  }
+  /** Seed from an array of 32-bit words; up to 624 words fill the whole state. */
+  initByArray(key) {
+    const mt = this.mt, N = 624, len = key.length;
+    this.initGenrand(19650218);
+    let i = 1, j = 0;
+    for (let k = Math.max(N, len); k; k--) {
+      const p = mt[i - 1] ^ (mt[i - 1] >>> 30);
+      mt[i] = ((mt[i] ^ Math.imul(p, 1664525)) + (key[j] >>> 0) + j) >>> 0;
+      i++; j++;
+      if (i >= N) { mt[0] = mt[N - 1]; i = 1; }
+      if (j >= len) j = 0;
+    }
+    for (let k = N - 1; k; k--) {
+      const p = mt[i - 1] ^ (mt[i - 1] >>> 30);
+      mt[i] = ((mt[i] ^ Math.imul(p, 1566083941)) - i) >>> 0;
+      i++;
+      if (i >= N) { mt[0] = mt[N - 1]; i = 1; }
+    }
+    mt[0] = 0x80000000;
+  }
+  /** Next uniformly distributed 32-bit unsigned integer. */
+  int32() {
+    const mt = this.mt;
+    if (this.mti >= 624) {
+      if (this.mti === 625) this.initGenrand(5489);
+      let kk = 0, y;
+      for (; kk < 624 - 397; kk++) {
+        y = (mt[kk] & 0x80000000) | (mt[kk + 1] & 0x7fffffff);
+        mt[kk] = mt[kk + 397] ^ (y >>> 1) ^ (y & 1 ? 0x9908b0df : 0);
+      }
+      for (; kk < 623; kk++) {
+        y = (mt[kk] & 0x80000000) | (mt[kk + 1] & 0x7fffffff);
+        mt[kk] = mt[kk - 227] ^ (y >>> 1) ^ (y & 1 ? 0x9908b0df : 0);
+      }
+      y = (mt[623] & 0x80000000) | (mt[0] & 0x7fffffff);
+      mt[623] = mt[396] ^ (y >>> 1) ^ (y & 1 ? 0x9908b0df : 0);
+      this.mti = 0;
+    }
+    let y = mt[this.mti++];
+    y ^= y >>> 11;
+    y ^= (y << 7) & 0x9d2c5680;
+    y ^= (y << 15) & 0xefc60000;
+    y ^= y >>> 18;
+    return y >>> 0;
+  }
+  /** Unbiased integer in [0, n), by rejecting the top sliver of the 32-bit range that would favor small values. */
+  int(n) {
+    const limit = 0x100000000 - (0x100000000 % n);
+    let x;
+    do x = this.int32(); while (x >= limit);
+    return x % n;
+  }
+}
+// ---- MT19937 END ----
+
+/** One generator per page load, its full 624-word state seeded from the OS's cryptographic randomness. */
+const rng = (() => {
+  const seed = new Uint32Array(624);
+  if (globalThis.crypto?.getRandomValues) crypto.getRandomValues(seed);
+  else for (let i = 0; i < seed.length; i++) seed[i] = (Math.random() * 0x100000000) ^ (Date.now() * (i + 1));
+  return new MT19937(seed);
+})();
+
+// ---------- Helpers ----------
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const uid = () => Date.now().toString(36) + rng.int32().toString(36);
+const LETTERS = ['B', 'I', 'N', 'G', 'O'];
+const colOf = n => Math.floor((n - 1) / 15);
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+function fmtClock(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, ss = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+}
+const fmtDate = t => new Date(t).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+const fmtTime = t => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+const listJoin = a => a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1] : a.join('');
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+const ICON = {
+  pause: '<svg class="i" viewBox="0 0 24 24"><path d="M6.5 5h4v14h-4zM13.5 5h4v14h-4z"/></svg>',
+  play: '<svg class="i" viewBox="0 0 24 24"><path d="M7.5 4.8v14.4L19 12z"/></svg>',
+  voice: '<svg class="i" viewBox="0 0 24 24"><path d="M3.5 9h4L12.5 5v14l-5-4h-4z"/><path class="s" d="M16 9a4.2 4.2 0 0 1 0 6M18.6 6.4a8 8 0 0 1 0 11.2"/></svg>',
+  mute: '<svg class="i" viewBox="0 0 24 24"><path d="M3.5 9h4L12.5 5v14l-5-4h-4z"/><path class="s" d="M16 9.5l5 5M21 9.5l-5 5"/></svg>',
+  first: '<svg class="i" viewBox="0 0 24 24"><path class="s" d="M6.5 6v12M17.5 6l-6 6 6 6"/></svg>',
+  prev: '<svg class="i" viewBox="0 0 24 24"><path class="s" d="M15 6l-6 6 6 6"/></svg>',
+  next: '<svg class="i" viewBox="0 0 24 24"><path class="s" d="M9 6l6 6-6 6"/></svg>',
+  edit: '<svg class="i" viewBox="0 0 24 24"><path class="s" d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/></svg>',
+  chev: '<svg class="i chev" viewBox="0 0 24 24"><path class="s" d="M9 6l6 6-6 6"/></svg>',
+};
+
+function ballHTML(n, cls = '') {
+  if (!n) return `<div class="ball empty ${cls}"><div class="face"><span class="bl">&nbsp;</span><span class="bn">–</span></div></div>`;
+  const c = colOf(n);
+  return `<div class="ball L${c} ${cls}"><div class="face"><span class="bl">${LETTERS[c]}</span><span class="bn">${n}</span></div></div>`;
+}
+
+// ---------- Patterns ----------
+// Card squares are numbered 0–24, left to right, top to bottom; column = index % 5 (B I N G O); 12 is the free space.
+const row = r => [0, 1, 2, 3, 4].map(c => r * 5 + c);
+const col = c => [0, 1, 2, 3, 4].map(r => r * 5 + c);
+const cells = (...lists) => [...new Set(lists.flat())].sort((a, b) => a - b);
+const BUILTIN = [
+  { id: 'traditional', name: 'Traditional', desc: 'Any row, column or diagonal',
+    variants: [...[0, 1, 2, 3, 4].map(row), ...[0, 1, 2, 3, 4].map(col), [0, 6, 12, 18, 24], [4, 8, 12, 16, 20]] },
+  { id: 'four-corners', name: 'Four Corners', variants: [[0, 4, 20, 24]] },
+  { id: 'x', name: 'X', desc: 'Both diagonals', variants: [cells([0, 6, 12, 18, 24], [4, 8, 12, 16, 20])] },
+  { id: 'plus', name: 'Plus (+)', desc: 'Middle row and column', variants: [cells(row(2), col(2))] },
+  { id: 'blackout', name: 'Blackout', desc: 'Cover the whole card', variants: [cells([...Array(25).keys()])] },
+  { id: 'frame', name: 'Picture Frame', desc: 'The outside edge', variants: [cells(row(0), row(4), col(0), col(4))] },
+  { id: 'small-frame', name: 'Small Frame', desc: 'Ring around the free space', variants: [[6, 7, 8, 11, 13, 16, 17, 18]] },
+  { id: 'postage', name: 'Postage Stamp', desc: 'Any 2×2 corner', variants: [[0, 1, 5, 6], [3, 4, 8, 9], [15, 16, 20, 21], [18, 19, 23, 24]] },
+  { id: 'diamond', name: 'Diamond', variants: [[2, 6, 8, 10, 14, 16, 18, 22]] },
+  { id: 'letter-t', name: 'Letter T', variants: [cells(row(0), col(2))] },
+  { id: 'letter-l', name: 'Letter L', variants: [cells(col(0), row(4))] },
+  { id: 'letter-h', name: 'Letter H', variants: [cells(col(0), col(4), row(2))] },
+];
+const allPatterns = () => [...BUILTIN, ...DB.patterns];
+
+/** Columns (0–4) that any winning arrangement uses. The free space doesn't count: it is covered without a call. */
+function columnsInPlay(p) {
+  const set = new Set();
+  for (const v of p.variants) for (const i of v) if (i !== 12) set.add(i % 5);
+  return set;
+}
+
+function patMini(p, cls = '') {
+  const on = new Set(p.variants[0]);
+  const cyc = p.variants.length > 1 ? ` data-v="${esc(JSON.stringify(p.variants))}"` : '';
+  return `<div class="pat ${cls}"${cyc} aria-hidden="true">${LETTERS.map(l => `<b>${l}</b>`).join('')}` +
+    [...Array(25).keys()].map(i => `<i class="${on.has(i) ? 'f' : ''}${i === 12 ? ' free' : ''}"></i>`).join('') + '</div>';
+}
+// Patterns with several winning arrangements (e.g. Traditional) step through them.
+let patTick = 0;
+setInterval(() => {
+  patTick++;
+  for (const el of $$('.pat[data-v]')) {
+    const v = JSON.parse(el.dataset.v), on = new Set(v[patTick % v.length]);
+    $$('i', el).forEach((c, i) => c.classList.toggle('f', on.has(i)));
+  }
+}, 1100);
+
+// ---------- Storage ----------
+// Everything lives in this browser's localStorage under one key.
+const KEY = 'bingo:v1';
+const DB = (() => {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(KEY)); } catch {}
+  d = d && typeof d === 'object' ? d : {};
+  d.sessions ||= []; d.games ||= {}; d.patterns ||= [];
+  d.settings = { auto: false, interval: 8, voice: false, ...d.settings };
+  d.settings.interval = Math.min(30, Math.max(6, +d.settings.interval || 8));
+  d.settings.voiceRates ||= {};
+  return d;
+})();
+let saveWarned = false;
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(DB)); }
+  catch { if (!saveWarned) { saveWarned = true; toast('Could not save. Browser storage may be full or blocked.'); } }
+}
+// A game that was running when the page closed resumes as paused, its clock counting up to the last moment the page was seen.
+for (const g of Object.values(DB.games)) {
+  if (g.runningSince) {
+    g.elapsedMs += Math.max(0, (g.lastSeen || g.runningSince) - g.runningSince);
+    g.runningSince = null;
+  }
+  if (g.state === 'playing') g.state = 'paused';
+}
+save();
+
+const sessionById = id => DB.sessions.find(s => s.id === id);
+const sessionOf = g => sessionById(g.sessionId);
+const gameNumber = g => sessionOf(g).gameIds.indexOf(g.id) + 1;
+const elapsed = g => g.elapsedMs + (g.runningSince ? Date.now() - g.runningSince : 0);
+
+function createSession(name) {
+  const s = { id: uid(), name, createdAt: Date.now(), gameIds: [] };
+  DB.sessions.push(s);
+  // Each session's first game starts in manual calling; the interval and announcer choices carry over.
+  DB.settings.auto = false;
+  save();
+  return s;
+}
+function createGame(s, p) {
+  const g = {
+    id: uid(), sessionId: s.id, createdAt: Date.now(), startedAt: null, endedAt: null,
+    pattern: { id: p.id, name: p.name, desc: p.desc || '', variants: p.variants },
+    state: 'ready', calls: [], callTimes: [], elapsedMs: 0, runningSince: null, lastSeen: null,
+  };
+  DB.games[g.id] = g; s.gameIds.push(g.id); save();
+  return g;
+}
+function deleteGame(g) {
+  const s = sessionOf(g);
+  if (s) s.gameIds = s.gameIds.filter(id => id !== g.id);
+  delete DB.games[g.id]; save();
+}
+
+// ---------- UI plumbing ----------
+const app = $('#app');
+let V = { kind: 'none' };   // the current screen and its transient state
+
+let toastTimer;
+function toast(msg, btn) {
+  $('#toast-msg').textContent = msg;
+  const b = $('#toast-btn');
+  b.hidden = !btn;
+  if (btn) { b.textContent = btn.label; b.onclick = btn.onClick; }
+  $('#toast').classList.add('show');
+  clearTimeout(toastTimer);
+  if (!btn) toastTimer = setTimeout(() => $('#toast').classList.remove('show'), 3500);
+}
+
+/** Modal dialog. Buttons are listed primary-first (that one answers the Enter key). Resolves with { value, el }. */
+function modal({ title, body = '', buttons, init, validate }) {
+  return new Promise(resolve => {
+    const d = document.createElement('dialog');
+    d.className = 'modal';
+    d.innerHTML = `<form method="dialog"><h2>${esc(title)}</h2>${body}<div class="mbtns">` +
+      buttons.map(b => `<button class="btn ${b.cls || ''}" value="${b.value}"${b.value === 'cancel' || b.novalidate ? ' formnovalidate' : ''}>${esc(b.label)}</button>`).join('') +
+      '</div></form>';
+    document.body.append(d);
+    const form = $('form', d);
+    if (validate) form.addEventListener('submit', e => {
+      const v = e.submitter?.value ?? buttons[0].value;
+      if (v !== 'cancel' && validate(d, v) === false) e.preventDefault();
+    });
+    d.addEventListener('close', () => {
+      const result = { value: d.returnValue || 'cancel', el: d, data: Object.fromEntries(new FormData(form)) };
+      d.remove();
+      resolve(result);
+    });
+    init?.(d);
+    d.showModal();
+  });
+}
+const confirmDlg = (title, text, ok, cls = 'primary') =>
+  modal({ title, body: text ? `<p>${esc(text)}</p>` : '', buttons: [{ label: ok, value: 'ok', cls }, { label: 'Cancel', value: 'cancel' }] })
+    .then(r => r.value === 'ok');
+const promptDlg = (title, value, ok) =>
+  modal({
+    title, body: `<label class="field"><span>Name</span><input name="v" required maxlength="60" value="${esc(value)}" autocomplete="off"></label>`,
+    buttons: [{ label: ok, value: 'ok', cls: 'primary' }, { label: 'Cancel', value: 'cancel' }],
+    init: d => setTimeout(() => $('input', d).select(), 50),
+  }).then(r => r.value === 'ok' ? r.data.v.trim() : null);
+
+// Routes: #/ (sessions), #/s/<id> (a session), #/s/<id>/pick (choose a game), #/g/<id> (a game)
+function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
+function route() {
+  leave();
+  const [kind, id, sub] = location.hash.replace(/^#\/?/, '').split('/');
+  const s = kind === 's' && sessionById(id), g = kind === 'g' && DB.games[id];
+  if (s && sub === 'pick') renderPicker(s);
+  else if (s) renderSession(s);
+  else if (g && sessionOf(g)) renderGame(g);
+  else renderHome();
+  window.scrollTo(0, 0);
+}
+/** Tidy up the screen being left: a running game pauses; a game that was never started is discarded. */
+function leave() {
+  if (V.kind === 'game') {
+    V.flight?.finish();
+    clearAuto(); stopSpeech();
+    const g = V.g;
+    if (g.state === 'playing') pauseGame(true);
+    if (g.state === 'ready' && DB.games[g.id]) deleteGame(g);
+    wake(false);
+  }
+  V = { kind: 'none' };
+}
+
+const ACT = {};
+app.addEventListener('click', e => {
+  const t = e.target.closest('[data-act]');
+  if (!t || t.disabled || !app.contains(t)) return;
+  const fn = ACT[t.dataset.act];
+  if (fn) { e.preventDefault(); fn(t); }
+});
+
+// ---------- Home: sessions ----------
+function renderHome() {
+  V = { kind: 'home' };
+  const ss = [...DB.sessions].sort((a, b) => b.createdAt - a.createdAt);
+  app.innerHTML = `<div class="page">
+    <header class="phead"><div class="brand grow">${ballHTML(7)}<h1>Bingo Caller</h1></div>
+      ${ss.length ? '<button class="btn primary" data-act="new-session">＋ New session</button>' : ''}</header>
+    ${ss.length ? `<div class="section-h">Sessions</div><div class="list">${ss.map(sessionRow).join('')}</div>` : `
+      <div class="empty">${ballHTML(42)}<h2>No sessions yet</h2>
+        <p>A session holds a run of games, such as one evening's play. Every call is kept so you can look back through any game.</p>
+        <button class="btn primary big" data-act="new-session">Start a session</button></div>`}
+  </div>`;
+}
+function sessionRow(s) {
+  const games = s.gameIds.map(id => DB.games[id]).filter(Boolean);
+  const live = games.some(g => g.state === 'paused' || g.state === 'playing');
+  const last = games[games.length - 1];
+  return `<a class="row" href="#/s/${s.id}">
+    <div class="grow"><div class="t">${esc(s.name)}${live ? '<span class="badge paused">In progress</span>' : ''}</div>
+      <div class="sub">${fmtDate(s.createdAt)} · ${plural(games.length, 'game')}${last ? ' · last: ' + esc(last.pattern.name) : ''}</div></div>
+    ${ICON.chev}</a>`;
+}
+ACT['new-session'] = async () => {
+  const name = await promptDlg('New session', `Session · ${fmtDate(Date.now())}`, 'Create');
+  if (name) go(`#/s/${createSession(name).id}`);
+};
+
+// ---------- Session: its games ----------
+function renderSession(s) {
+  V = { kind: 'session', s };
+  const games = s.gameIds.map(id => DB.games[id]).filter(Boolean);
+  app.innerHTML = `<div class="page">
+    <header class="phead"><a class="back" href="#/">‹ <span>Sessions</span></a></header>
+    <div class="titlerow"><h1>${esc(s.name)}</h1>
+      <button class="iconbtn" data-act="rename-session" aria-label="Rename session">${ICON.edit}</button>
+      <button class="btn danger" data-act="delete-session">Delete</button></div>
+    <a class="btn primary big" href="#/s/${s.id}/pick">＋ New game</a>
+    ${games.length ? `<div class="section-h">Games</div><div class="list">${games.map((g, i) => gameRow(g, i + 1)).reverse().join('')}</div>`
+      : '<p class="sub" style="margin-top:18px">No games yet. Start one, choose its pattern, and the calls will be recorded here.</p>'}
+  </div>`;
+}
+function gameRow(g, num) {
+  const badge = { ready: '<span class="badge">Not started</span>', paused: '<span class="badge paused">Paused</span>', playing: '<span class="badge live">Live</span>', over: '' }[g.state];
+  const when = g.startedAt ? fmtTime(g.startedAt) : 'not started';
+  return `<a class="row" href="#/g/${g.id}">${patMini(g.pattern, 'sm')}
+    <div class="grow"><div class="t">Game ${num} · ${esc(g.pattern.name)}${badge}</div>
+      <div class="sub">${plural(g.calls.length, 'call')} · ${fmtClock(elapsed(g))} · ${when}</div></div>${ICON.chev}</a>`;
+}
+ACT['rename-session'] = async () => {
+  const s = V.s, name = await promptDlg('Rename session', s.name, 'Save');
+  if (name) { s.name = name; save(); renderSession(s); }
+};
+ACT['delete-session'] = async () => {
+  const s = V.s;
+  const ok = await confirmDlg(`Delete “${s.name}”?`, `This removes its ${plural(s.gameIds.length, 'game')} and all of their calls. It can't be undone.`, 'Delete session', 'danger');
+  if (!ok) return;
+  for (const id of s.gameIds) delete DB.games[id];
+  DB.sessions = DB.sessions.filter(x => x.id !== s.id);
+  save(); go('#/');
+};
+
+// ---------- Picker: choose a pattern ----------
+function renderPicker(s) {
+  V = { kind: 'picker', s };
+  const card = p => `<div class="pwrap"><button class="pcard" data-act="pick" data-id="${esc(p.id)}">${patMini(p)}
+      <span class="nm">${esc(p.name)}</span>${p.desc ? `<span class="ds">${esc(p.desc)}</span>` : ''}</button>
+      ${p.custom ? `<button class="iconbtn edit" data-act="edit-pattern" data-id="${esc(p.id)}" aria-label="Edit ${esc(p.name)}">${ICON.edit}</button>` : ''}</div>`;
+  app.innerHTML = `<div class="page">
+    <header class="phead"><a class="back" href="#/s/${s.id}">‹ <span>${esc(s.name)}</span></a></header>
+    <div class="titlerow"><h1>Choose a game</h1></div>
+    <div class="pgrid">${BUILTIN.map(card).join('')}</div>
+    <div class="section-h">Your patterns</div>
+    <div class="pgrid">${DB.patterns.map(card).join('')}
+      <button class="pcard add" data-act="new-pattern"><span class="plus">＋</span>Create a pattern</button></div>
+  </div>`;
+}
+ACT.pick = t => {
+  const p = allPatterns().find(x => x.id === t.dataset.id);
+  if (p) go(`#/g/${createGame(V.s, p).id}`);
+};
+ACT['new-pattern'] = () => editPattern(null);
+ACT['edit-pattern'] = t => editPattern(DB.patterns.find(x => x.id === t.dataset.id));
+
+async function editPattern(p) {
+  const on = new Set(p ? p.variants[0] : []);
+  const r = await modal({
+    title: p ? 'Edit pattern' : 'New pattern',
+    body: `<label class="field"><span>Pattern name</span><input name="name" required maxlength="40" value="${esc(p?.name || '')}" placeholder="e.g. Letter Z" autocomplete="off"></label>
+      <div class="ped">${LETTERS.map(l => `<b>${l}</b>`).join('')}${[...Array(25).keys()].map(i =>
+        `<button type="button" data-i="${i}" class="${on.has(i) ? 'f' : ''}" aria-pressed="${on.has(i)}" aria-label="${LETTERS[i % 5]} column, row ${Math.floor(i / 5) + 1}${i === 12 ? ', free space' : ''}">${i === 12 ? '★' : ''}</button>`).join('')}</div>
+      <p class="hint">Tap squares to add them to the pattern. The ★ center is the free space.</p><p class="err"></p>`,
+    buttons: [{ label: 'Save', value: 'save', cls: 'primary' }, { label: 'Cancel', value: 'cancel' },
+      ...(p ? [{ label: 'Delete', value: 'delete', cls: 'danger left', novalidate: true }] : [])],
+    init: d => $('.ped', d).addEventListener('click', e => {
+      const b = e.target.closest('button[data-i]');
+      if (!b) return;
+      const i = +b.dataset.i;
+      on.has(i) ? on.delete(i) : on.add(i);
+      b.classList.toggle('f', on.has(i)); b.setAttribute('aria-pressed', on.has(i));
+      $('.err', d).textContent = '';
+    }),
+    validate: (d, v) => {
+      if (v === 'save' && ![...on].some(i => i !== 12)) { $('.err', d).textContent = 'Pick at least one square besides the free space.'; return false; }
+    },
+  });
+  if (r.value === 'delete') {
+    if (await confirmDlg(`Delete “${p.name}”?`, 'Games already played with it keep their record.', 'Delete', 'danger')) {
+      DB.patterns = DB.patterns.filter(x => x.id !== p.id); save();
+    }
+  } else if (r.value === 'save') {
+    const data = { name: r.data.name.trim(), variants: [[...on].sort((a, b) => a - b)] };
+    if (p) Object.assign(p, data); else DB.patterns.push({ id: 'c-' + uid(), custom: true, ...data });
+    save();
+  }
+  renderPicker(V.s);
+}
+
+// ---------- Game ----------
+function renderGame(g) {
+  const s = sessionOf(g), inPlay = columnsInPlay(g.pattern), anyOff = inPlay.size < 5;
+  V = { kind: 'game', g, s, inPlay, landed: g.calls.length, scrub: null, timer: null, flight: null, confirming: false };
+  let board = '';
+  for (let c = 0; c < 5; c++) {
+    board += `<div class="hdr L${c}${inPlay.has(c) ? '' : ' off'}" style="--L:${c + 1};--K:1">${LETTERS[c]}</div>`;
+    for (let k = 0; k < 15; k++) {
+      const n = c * 15 + k + 1;
+      board += `<div class="cell L${c}${inPlay.has(c) ? '' : ' off'}" id="n${n}" style="--L:${c + 1};--K:${k + 2}">${n}</div>`;
+    }
+  }
+  app.innerHTML = `<div class="game">
+    <header class="gbar">
+      <a class="back" href="#/s/${s.id}">‹ <span>${esc(s.name)}</span></a>
+      <div class="gtitle"><span class="gnum">Game ${gameNumber(g)} ·</span><b>${esc(g.pattern.name)}</b></div>
+      <div class="clock" id="clock" role="timer" aria-label="Game clock"></div>
+    </header>
+    <section class="stage">
+      <div class="cur" id="cur"></div>
+      <div class="meta">
+        <div class="count" id="count"></div>
+        <div class="recent" id="recent" aria-label="Previous calls"></div>
+        <div class="legend"><span><i class="sw on"></i>Called</span><span><i class="sw just"></i>Latest call</span>
+          ${anyOff ? `<span><i class="sw off"></i>Not in pattern: ${LETTERS.filter((_, c) => !inPlay.has(c)).join(', ')}</span><span><i class="sw offon"></i>Called, not used</span>` : ''}</div>
+      </div>
+      <div class="patbox">${patMini(g.pattern, 'md')}<span>${esc(g.pattern.desc || g.pattern.name)}</span></div>
+    </section>
+    <section class="boardwrap"><div class="board" id="board" aria-label="Called numbers board">${board}</div><div class="overlay" id="overlay"></div></section>
+    <section class="controls" id="controls"></section>
+    <section class="scrub" aria-label="Look back through the calls">
+      <button class="iconbtn" data-act="scrub-first" aria-label="First call">${ICON.first}</button>
+      <button class="iconbtn" data-act="scrub-prev" aria-label="Previous call">${ICON.prev}</button>
+      <input type="range" id="scrubber" min="0" max="0" step="1" value="0" aria-label="Call history">
+      <button class="iconbtn" data-act="scrub-next" aria-label="Next call">${ICON.next}</button>
+      <button class="live" data-act="scrub-live" id="livebtn">Live</button>
+      <span class="scrubinfo" id="scrubinfo"></span>
+    </section>
+  </div>`;
+  $('#scrubber').addEventListener('input', e => setScrub(+e.target.value));
+  renderControls(); updateGame(); updateClock();
+  wake(true);
+}
+
+/** How many calls the board shows: all that have landed, or fewer while looking back. */
+const shownCount = () => V.scrub ?? V.landed;
+
+function updateGame(popLatest = false) {
+  const g = V.g, p = shownCount(), shown = new Set(g.calls.slice(0, p)), latest = p ? g.calls[p - 1] : null;
+  for (let n = 1; n <= 75; n++) {
+    const el = document.getElementById('n' + n);
+    el.classList.toggle('on', shown.has(n));
+    el.classList.toggle('just', n === latest);
+    el.classList.remove('pop');
+  }
+  if (popLatest && latest && !reducedMotion.matches) {
+    const el = document.getElementById('n' + latest);
+    void el.offsetWidth;
+    el.classList.add('pop');
+  }
+  $('#board').classList.toggle('scrubbing', V.scrub != null);
+  $('#cur').innerHTML = ballHTML(latest);
+  $('#count').innerHTML = V.scrub != null
+    ? `<b>${p}</b>of ${V.landed} called · looking back`
+    : `<b>${p}</b>of 75 called${p === 75 ? ' · all numbers are out' : ''}`;
+  $('#recent').innerHTML = g.calls.slice(Math.max(0, p - 7), Math.max(0, p - 1)).reverse().map(n => ballHTML(n)).join('');
+  const sc = $('#scrubber');
+  sc.max = V.landed; sc.value = p; sc.disabled = !V.landed;
+  $('[data-act=scrub-first]').disabled = $('[data-act=scrub-prev]').disabled = p === 0;
+  $('[data-act=scrub-next]').disabled = p >= V.landed;
+  $('#livebtn').hidden = V.scrub == null;
+  $('#scrubinfo').innerHTML = p ? `Call <b>${p}</b> of ${V.landed} · at ${fmtClock(g.callTimes[p - 1])}` : 'No calls yet';
+}
+
+function updateClock() {
+  if (V.kind !== 'game') return;
+  const g = V.g, el = $('#clock');
+  el.classList.toggle('paused', g.state === 'paused');
+  el.innerHTML = (g.state === 'paused' ? '<span class="tag">PAUSED</span>' : '') + fmtClock(elapsed(g));
+}
+let lastPersist = 0;
+setInterval(() => {
+  updateClock();
+  if (V.kind === 'game' && V.g.state === 'playing') {
+    V.g.lastSeen = Date.now();
+    if (Date.now() - lastPersist > 5000) { lastPersist = Date.now(); save(); }
+  }
+}, 250);
+
+function renderControls() {
+  const g = V.g, st = DB.settings, el = $('#controls');
+  const mode = `<div class="seg" role="group" aria-label="Calling mode">
+      <button data-act="mode" data-v="manual" aria-pressed="${!st.auto}">Manual</button>
+      <button data-act="mode" data-v="auto" aria-pressed="${st.auto}">Automatic</button></div>`;
+  const interval = st.auto ? `<label class="interval">Every <input type="range" id="interval" min="6" max="30" step="1" value="${st.interval}" aria-label="Seconds between calls"><output id="intervalOut">${st.interval}s</output></label>` : '';
+  const voice = `<button class="iconbtn" data-act="voice" aria-pressed="${st.voice}" aria-label="Announcer settings" title="Announcer">${st.voice ? ICON.voice : ICON.mute}</button>`;
+  const settings = `<div class="grp">${mode}${interval}${voice}</div><div class="spacer"></div>`;
+  const done = g.calls.length >= 75;
+  if (g.state === 'ready') {
+    el.innerHTML = settings;
+  } else if (g.state === 'over') {
+    el.innerHTML = `<div class="grp summary"><span class="kicker">Bingo!</span>Game ${gameNumber(g)} over · ${plural(g.calls.length, 'call')} · ${fmtClock(elapsed(g))}</div><div class="spacer"></div>
+      <div class="grp"><button class="btn" data-act="continue">Continue game</button>
+      <button class="btn" data-act="again">Play again</button><button class="btn primary" data-act="new-game">New game</button></div>`;
+  } else {
+    const playing = g.state === 'playing';
+    el.innerHTML = settings + `<div class="grp">
+      <button class="btn" data-act="pause">${playing ? ICON.pause + ' Pause' : ICON.play + ' Resume'}</button>
+      <button class="btn primary big" data-act="call" ${done ? 'disabled' : ''}>${st.auto && playing ? 'Call now' : 'Call next'}</button>
+      <button class="btn win big" data-act="bingo">Bingo!</button></div>
+      <div class="autobar" aria-hidden="true"><i id="autobar"></i></div>` + (V.confirming ? `
+      <div class="confirm" role="group" aria-label="Confirm bingo">
+        <div class="ctext"><b>Bingo called!</b><span>Check the card against the board. Calls are on hold.</span></div>
+        <div class="grp"><button class="btn" data-act="bingo-no">Keep playing</button>
+          <button class="btn win big" data-act="bingo-yes">End game</button></div></div>` : '');
+  }
+  $('#interval')?.addEventListener('input', e => {
+    st.interval = +e.target.value; $('#intervalOut').textContent = st.interval + 's'; save();
+    scheduleAuto();
+  });
+  renderOverlay();
+}
+
+function renderOverlay() {
+  const g = V.g, o = $('#overlay'), off = LETTERS.filter((_, c) => !V.inPlay.has(c));
+  const offNote = off.length ? `<p class="note">${listJoin(off)} numbers aren't used in this pattern. They're shown striped on the board and light up quietly when called.</p>` : '';
+  if (g.state === 'ready') {
+    o.innerHTML = `<div class="ocard">${patMini(g.pattern, 'lg')}<div class="txt">
+      <span class="kicker">Game ${gameNumber(g)} · ready</span><h2>${esc(g.pattern.name)}</h2>
+      ${g.pattern.desc ? `<span class="note">${esc(g.pattern.desc)}</span>` : ''}${offNote}
+      <div class="btns"><button class="btn primary big" data-act="start">${ICON.play} Start game</button>
+      <a class="btn big ghost" href="#/s/${V.s.id}/pick">Change pattern</a></div></div></div>`;
+  } else o.innerHTML = '';
+  o.classList.toggle('show', !!o.innerHTML);
+}
+
+function startGame() {
+  const g = V.g;
+  g.state = 'playing'; g.startedAt = Date.now(); g.runningSince = Date.now(); g.lastSeen = Date.now(); save();
+  renderControls(); updateClock();
+  if (DB.settings.auto) callNext();
+}
+/** Pause stops the clock and any automatic calling. */
+function pauseGame(quiet) {
+  const g = V.g;
+  if (g.state !== 'playing') return;
+  g.elapsedMs = elapsed(g); g.runningSince = null; g.state = 'paused'; save();
+  clearAuto();
+  if (!quiet) { renderControls(); updateClock(); }
+}
+function resumeGame() {
+  const g = V.g;
+  if (g.state !== 'paused') return;
+  g.state = 'playing'; g.runningSince = Date.now(); g.lastSeen = Date.now(); save();
+  renderControls(); updateClock(); scheduleAuto();
+}
+
+function callNext() {
+  const g = V.g;
+  if (g.state === 'ready' || g.state === 'over' || V.confirming || g.calls.length >= 75) return;
+  V.flight?.finish();
+  if (V.scrub != null) { V.scrub = null; updateGame(); }
+  if (g.state === 'paused') resumeGame();
+  clearAuto();
+  const called = new Set(g.calls), left = [];
+  for (let n = 1; n <= 75; n++) if (!called.has(n)) left.push(n);
+  const n = left[rng.int(left.length)];
+  g.calls.push(n); g.callTimes.push(elapsed(g)); save();
+  V.callAt = Date.now();
+  // A number from a column the pattern doesn't use just takes the "latest call" ring: no announcement, no big ball.
+  const playable = V.inPlay.has(colOf(n));
+  const land = () => {
+    V.landed = g.calls.length;
+    updateGame(playable);
+    if (g.calls.length >= 75) renderControls();
+    scheduleAuto(true, playable ? undefined : QUIET_GAP);
+  };
+  if (playable) { speak(n); flyBall(n, land); }
+  else land();
+}
+
+function clearAuto() {
+  clearTimeout(V.timer); V.timer = null;
+  const bar = $('#autobar');
+  if (bar) { bar.style.transition = 'none'; bar.style.width = '0'; }
+}
+/** In automatic mode, queue the next call. Only while the game runs, nothing is in flight, and the board shows the latest call.
+    Right after a call lands, the wait is whatever is left of the interval since that call began; otherwise it is the full interval.
+    A call the pattern doesn't use passes a shorter interval (QUIET_GAP), since there is nothing to announce or mark. */
+const QUIET_GAP = 1500;
+function scheduleAuto(afterCall = false, total = DB.settings.interval * 1000) {
+  clearAuto();
+  const g = V.g;
+  if (V.kind !== 'game' || !DB.settings.auto || g.state !== 'playing' || V.scrub != null || V.flight || V.confirming || g.calls.length >= 75) return;
+  const spent = afterCall ? Math.min(total, Date.now() - V.callAt) : 0;
+  const ms = Math.max(400, total - spent);
+  V.timer = setTimeout(callNext, ms);
+  const bar = $('#autobar');
+  if (bar) {
+    bar.style.width = (100 * (1 - ms / total)).toFixed(1) + '%';
+    void bar.offsetWidth;
+    bar.style.transition = `width ${ms}ms linear`; bar.style.width = '100%';
+  }
+}
+
+/** The just-called ball swells up in the middle of the screen, then shrinks back into its square on the board. */
+function flyBall(n, land) {
+  const cell = document.getElementById('n' + n);
+  let el = null, shade = null, anim = null, done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    anim?.cancel(); el?.remove(); shade?.remove();
+    V.flight = null;
+    land();
+  };
+  V.flight = { finish };
+  if (reducedMotion.matches || !cell.getClientRects().length) { finish(); return; }
+  const tmp = document.createElement('div');
+  tmp.innerHTML = ballHTML(n, 'fly');
+  el = tmp.firstElementChild;
+  shade = document.createElement('div');
+  shade.className = 'flyback';
+  document.body.append(shade, el);
+  const S = el.offsetWidth, r = cell.getBoundingClientRect();
+  const dx = r.left + r.width / 2 - innerWidth / 2, dy = r.top + r.height / 2 - innerHeight / 2, k = Math.min(r.width, r.height) / S;
+  const home = 'translate(0px, 0px)', there = `translate(${dx}px, ${dy}px) scale(${k})`;
+  const timing = { duration: 2300, fill: 'forwards' };
+  anim = el.animate([
+    { transform: `${home} scale(.12) rotate(-220deg)`, opacity: 0, easing: 'cubic-bezier(.2, .9, .3, 1.25)' },
+    { transform: `${home} scale(1) rotate(0deg)`, opacity: 1, offset: .24 },
+    { transform: `${home} scale(1.03) rotate(0deg)`, offset: .42 },
+    { transform: `${home} scale(1) rotate(0deg)`, offset: .62, easing: 'cubic-bezier(.55, 0, .25, 1)' },
+    { transform: `${there} rotate(0deg)`, opacity: 1, offset: .97 },
+    { transform: `${there} rotate(0deg)`, opacity: 0 },
+  ], timing);
+  shade.animate([{ opacity: 0 }, { opacity: 1, offset: .18 }, { opacity: 1, offset: .6 }, { opacity: 0 }], timing);
+  anim.onfinish = finish;
+}
+
+function setScrub(p) {
+  V.flight?.finish();
+  p = Math.max(0, Math.min(V.landed, p));
+  V.scrub = p === V.landed ? null : p;
+  updateGame();
+  scheduleAuto();
+}
+
+// Speech, using the device's built-in voices. iOS only speaks after a tap has enabled it (the Announcer panel provides one).
+const canSpeak = 'speechSynthesis' in window;
+// The voice list is kept from the last time it was non-empty: some browsers (iOS Safari in particular) briefly report
+// no voices, and an utterance built at that moment quietly falls back to the device's default voice.
+let voiceCache = [];
+function allVoices() {
+  if (!canSpeak) return [];
+  const vs = speechSynthesis.getVoices();
+  if (vs.length) voiceCache = vs;
+  return voiceCache;
+}
+if (canSpeak) speechSynthesis.addEventListener('voiceschanged', allVoices);
+const chosenVoice = () => allVoices().find(v => v.voiceURI === DB.settings.voiceURI) || null;
+function utter(text, voice, rate) {
+  const u = new SpeechSynthesisUtterance(text);
+  if (voice) { u.voice = voice; u.lang = voice.lang; }
+  u.rate = rate;
+  return u;
+}
+// Speed is kept per voice ('' is the device default). Most voices sound better a little faster than their own default.
+const RATE_DEFAULT = 1.1, RATE_MIN = .6, RATE_MAX = 1.8, RATE_STEP = .05;
+const voiceRate = () => DB.settings.voiceRates[DB.settings.voiceURI || ''] ?? RATE_DEFAULT;
+const fmtRate = r => Math.round(r * 100) + '%';
+let sayToken = 0, sayTimer = null, sayQueue = [];
+function stopSpeech() {
+  sayToken++; clearTimeout(sayTimer); sayQueue = [];
+  if (canSpeak && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel();
+}
+/** Speak the parts in order, with a short pause between them. A newer call cuts off whatever is still being said.
+    Every part is built up front with the same voice and speed, so the repeat can't drift to another voice;
+    sayQueue holds them so the browser can't discard one before its "end" event fires. */
+function say(...parts) {
+  if (!canSpeak) return;
+  stopSpeech();
+  const token = sayToken, voice = chosenVoice(), rate = voiceRate();
+  sayQueue = parts.map(p => utter(p, voice, rate));
+  const next = i => {
+    if (token !== sayToken || i >= sayQueue.length) return;
+    const u = sayQueue[i];
+    u.onend = () => { if (token === sayToken) sayTimer = setTimeout(() => next(i + 1), 600); };
+    speechSynthesis.speak(u);
+  };
+  next(0);
+}
+// "B 13" … "That's B 13", with the lead-in varied and never the same twice running.
+const REPEATS = ["That's", 'Once more,', 'Again,', 'I repeat,', 'Once again,', 'That was', 'Repeating,', 'One more time,'];
+let lastRepeat = -1;
+function callWords(n) {
+  let i;
+  do i = rng.int(REPEATS.length); while (i === lastRepeat);
+  lastRepeat = i;
+  const call = `${LETTERS[colOf(n)]} ${n}`;
+  return [`${call}.`, `${REPEATS[i]} ${call}.`];
+}
+function speak(n) {
+  if (DB.settings.voice) say(...callWords(n));
+}
+
+/** Voices grouped for the picker: this device's language first, then the rest, each by name. */
+function voiceOptions() {
+  const base = (navigator.language || 'en').slice(0, 2).toLowerCase(), byName = (a, b) => a.name.localeCompare(b.name);
+  const vs = allVoices(), mine = vs.filter(v => v.lang.toLowerCase().startsWith(base)).sort(byName), rest = vs.filter(v => !mine.includes(v)).sort(byName);
+  const opt = v => `<option value="${esc(v.voiceURI)}"${v.voiceURI === DB.settings.voiceURI ? ' selected' : ''}>${esc(v.name)} (${esc(v.lang)})</option>`;
+  return `<option value="">Device default</option>` +
+    (mine.length ? `<optgroup label="${esc(navigator.language || 'Your language')}">${mine.map(opt).join('')}</optgroup>` : '') +
+    (rest.length ? `<optgroup label="Other languages">${rest.map(opt).join('')}</optgroup>` : '');
+}
+async function announcerSettings() {
+  const st = DB.settings;
+  const refresh = () => { const sel = $('dialog select[name=voice]'); if (sel) sel.innerHTML = voiceOptions(); };
+  if (canSpeak) speechSynthesis.addEventListener('voiceschanged', refresh);
+  await modal({
+    title: 'Announcer',
+    body: canSpeak ? `<label class="switchrow"><span>Announce calls aloud</span><input type="checkbox" class="switch" name="on"${st.voice ? ' checked' : ''}></label>
+      <label class="field"><span>Voice</span><select name="voice">${voiceOptions()}</select></label>
+      <div class="switchrow"><span>Speed</span><div class="stepper">
+        <button type="button" class="iconbtn" data-rate="-1" aria-label="Slower">−</button>
+        <output id="rateOut" aria-live="polite">${fmtRate(voiceRate())}</output>
+        <button type="button" class="iconbtn" data-rate="1" aria-label="Faster">+</button></div></div>
+      <button type="button" class="btn" data-preview>${ICON.voice} Preview</button>
+      <p class="hint">Numbers outside the game's pattern light up on the board without being announced. Voices come from this device; on iPad, more can be downloaded under Settings › Accessibility › Spoken Content › Voices.</p>`
+      : '<p>This browser has no speech support.</p>',
+    buttons: [{ label: 'Done', value: 'ok', cls: 'primary' }],
+    init: d => {
+      $('input[name=on]', d)?.addEventListener('change', e => {
+        st.voice = e.target.checked; save();
+        if (st.voice) say('Announcer on.'); else stopSpeech();
+      });
+      const showRate = () => {
+        const r = voiceRate();
+        $('#rateOut', d).textContent = fmtRate(r);
+        $('[data-rate="-1"]', d).disabled = r <= RATE_MIN + 1e-9;
+        $('[data-rate="1"]', d).disabled = r >= RATE_MAX - 1e-9;
+      };
+      if (canSpeak) showRate();
+      $('select[name=voice]', d)?.addEventListener('change', e => { st.voiceURI = e.target.value || null; save(); showRate(); say(...callWords(7)); });
+      for (const b of $$('[data-rate]', d)) b.addEventListener('click', () => {
+        const r = Math.round((voiceRate() + +b.dataset.rate * RATE_STEP) * 100) / 100;
+        st.voiceRates[st.voiceURI || ''] = Math.min(RATE_MAX, Math.max(RATE_MIN, r)); save();
+        showRate(); say(...callWords(1 + rng.int(75)));
+      });
+      $('[data-preview]', d)?.addEventListener('click', () => say(...callWords(1 + rng.int(75))));
+    },
+  });
+  if (canSpeak) speechSynthesis.removeEventListener('voiceschanged', refresh);
+  if (V.kind === 'game') renderControls();
+}
+
+// Keep the screen awake while a game is on screen (where supported).
+let wakeLock = null;
+async function wake(on) {
+  try {
+    if (on && !wakeLock && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } else if (!on && wakeLock) { const w = wakeLock; wakeLock = null; await w.release(); }
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && V.kind === 'game') wake(true);
+  if (document.visibilityState === 'hidden') save();
+});
+addEventListener('pagehide', save);
+
+ACT.start = startGame;
+ACT.call = callNext;
+ACT.pause = () => V.g.state === 'playing' ? pauseGame() : resumeGame();
+ACT.mode = t => {
+  DB.settings.auto = t.dataset.v === 'auto'; save();
+  renderControls(); scheduleAuto();
+};
+ACT.voice = announcerSettings;
+// Bingo is confirmed in the control strip so the board stays in view (and the scrubber usable) while a card is checked.
+ACT.bingo = () => {
+  V.flight?.finish();
+  stopSpeech();
+  V.confirming = true;
+  clearAuto(); renderControls();
+};
+ACT['bingo-no'] = () => {
+  V.confirming = false;
+  renderControls(); scheduleAuto();
+};
+ACT['bingo-yes'] = () => {
+  const g = V.g;
+  V.confirming = false; V.scrub = null;
+  clearAuto();
+  g.elapsedMs = elapsed(g); g.runningSince = null; g.state = 'over'; g.endedAt = Date.now(); save();
+  renderControls(); updateGame(); updateClock();
+};
+ACT.continue = () => {
+  const g = V.g;
+  g.state = 'paused'; g.endedAt = null; save();
+  resumeGame();
+};
+ACT.again = () => go(`#/g/${createGame(V.s, V.g.pattern).id}`);
+ACT['new-game'] = () => go(`#/s/${V.s.id}/pick`);
+ACT['scrub-first'] = () => setScrub(0);
+ACT['scrub-prev'] = () => setScrub(shownCount() - 1);
+ACT['scrub-next'] = () => setScrub(shownCount() + 1);
+ACT['scrub-live'] = () => setScrub(V.landed);
+
+// Keyboard (laptops): Space/Enter calls the next number (or pauses in automatic mode); arrows look back and forward.
+document.addEventListener('keydown', e => {
+  if (V.kind !== 'game' || $('dialog[open]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.closest?.('input, textarea, button, a') && (e.key === ' ' || e.key === 'Enter')) return;
+  const g = V.g;
+  if (V.confirming && e.key === 'Escape') { ACT['bingo-no'](); return; }
+  if (V.confirming && (e.key === ' ' || e.key === 'Enter' || e.key === 'p' || e.key === 'P')) { e.preventDefault(); return; }
+  if (e.key === ' ' || e.key === 'Enter') {
+    e.preventDefault();
+    if (g.state === 'ready') startGame();
+    else if (g.state === 'over') return;
+    else if (DB.settings.auto) ACT.pause();
+    else callNext();
+  } else if (e.key === 'p' || e.key === 'P') { if (g.state === 'playing' || g.state === 'paused') ACT.pause(); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); setScrub(shownCount() - 1); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); setScrub(shownCount() + 1); }
+  else if (e.key === 'Home') setScrub(0);
+  else if (e.key === 'End') setScrub(V.landed);
+});
+
+// ---------- Start ----------
+navigator.storage?.persist?.().catch(() => {});
+addEventListener('hashchange', route);
+route();
+
+// Self-update: sw.js keeps the app on the device for offline use and checks for a newer version on launch and
+// whenever the app returns to the foreground. When one is ready, reload straight away unless a game is under way.
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  const sw = navigator.serviceWorker;
+  sw.register('sw.js').catch(() => {});
+  sw.addEventListener('message', e => {
+    if (e.data?.type !== 'update-ready') return;
+    const busy = V.kind === 'game' && (V.g.state === 'playing' || V.g.state === 'paused');
+    if (!busy && !$('dialog[open]')) location.reload();
+    else toast('A new version is ready.', { label: 'Reload', onClick: () => location.reload() });
+  });
+  sw.startMessages();
+  let lastCheck = 0;
+  const check = () => {
+    if (Date.now() - lastCheck < 30e3) return;
+    lastCheck = Date.now();
+    sw.controller?.postMessage({ type: 'check' });
+  };
+  check();
+  sw.addEventListener('controllerchange', check);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+}
+</script>
+</body>
+</html>
