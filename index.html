@@ -326,7 +326,9 @@ dialog.modal p { margin: 0; color: var(--muted); }
   border-radius: 12px; padding: 12px 14px; outline: none; width: 100%;
 }
 .field input:focus, .field select:focus { border-color: var(--accent); }
+.field select:disabled { opacity: .5; }
 .switchrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; }
+.switchrow small { display: block; font-size: 13px; font-weight: 400; color: var(--muted); margin-top: 2px; }
 .switch {
   appearance: none; -webkit-appearance: none; margin: 0; flex: none; cursor: pointer;
   width: 51px; height: 31px; border-radius: 99px; background: var(--surface-2); position: relative; transition: background .2s;
@@ -533,9 +535,9 @@ const DB = (() => {
   try { d = JSON.parse(localStorage.getItem(KEY)); } catch {}
   d = d && typeof d === 'object' ? d : {};
   d.sessions ||= []; d.games ||= {}; d.patterns ||= [];
-  d.settings = { auto: false, interval: 8, voice: false, ...d.settings };
+  d.settings = { auto: false, interval: 8, voice: false, salty: false, style: 'classic', randomStyle: false, ...d.settings };
   d.settings.interval = Math.min(30, Math.max(6, +d.settings.interval || 8));
-  d.settings.voiceRates ||= {};
+  d.settings.voiceRates ||= {}; d.settings.voicePitches ||= {};
   return d;
 })();
 let saveWarned = false;
@@ -1040,29 +1042,33 @@ function allVoices() {
 }
 if (canSpeak) speechSynthesis.addEventListener('voiceschanged', allVoices);
 const chosenVoice = () => allVoices().find(v => v.voiceURI === DB.settings.voiceURI) || null;
-function utter(text, voice, rate) {
+function utter(text, voice, rate, pitch) {
   const u = new SpeechSynthesisUtterance(text);
   if (voice) { u.voice = voice; u.lang = voice.lang; }
-  u.rate = rate;
+  u.rate = rate; u.pitch = pitch;
   return u;
 }
-// Speed is kept per voice ('' is the device default). Most voices sound better a little faster than their own default.
-const RATE_DEFAULT = 1.1, RATE_MIN = .6, RATE_MAX = 1.8, RATE_STEP = .05;
-const voiceRate = () => DB.settings.voiceRates[DB.settings.voiceURI || ''] ?? RATE_DEFAULT;
-const fmtRate = r => Math.round(r * 100) + '%';
+// Speed and pitch are kept per voice ('' is the device default); 100% is the voice's own natural pace and pitch.
+const RATE_DEFAULT = 1, RATE_MIN = .6, RATE_MAX = 1.8;
+const PITCH_DEFAULT = 1, PITCH_MIN = .5, PITCH_MAX = 1.6;
+const TUNE_STEP = .05;
+const voiceKey = () => DB.settings.voiceURI || '';
+const voiceRate = () => DB.settings.voiceRates[voiceKey()] ?? RATE_DEFAULT;
+const voicePitch = () => DB.settings.voicePitches[voiceKey()] ?? PITCH_DEFAULT;
+const fmtPct = r => Math.round(r * 100) + '%';
 let sayToken = 0, sayTimer = null, sayQueue = [];
 function stopSpeech() {
   sayToken++; clearTimeout(sayTimer); sayQueue = [];
   if (canSpeak && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel();
 }
 /** Speak the parts in order, with a short pause between them. A newer call cuts off whatever is still being said.
-    Every part is built up front with the same voice and speed, so the repeat can't drift to another voice;
+    Every part is built up front with the same voice, speed and pitch, so the repeat can't drift to another voice;
     sayQueue holds them so the browser can't discard one before its "end" event fires. */
 function say(...parts) {
   if (!canSpeak) return;
   stopSpeech();
-  const token = sayToken, voice = chosenVoice(), rate = voiceRate();
-  sayQueue = parts.map(p => utter(p, voice, rate));
+  const token = sayToken, voice = chosenVoice(), rate = voiceRate(), pitch = voicePitch();
+  sayQueue = parts.map(p => utter(p, voice, rate, pitch));
   const next = i => {
     if (token !== sayToken || i >= sayQueue.length) return;
     const u = sayQueue[i];
@@ -1071,16 +1077,96 @@ function say(...parts) {
   };
   next(0);
 }
-// "B 13" … "That's B 13", with the lead-in varied and never the same twice running.
-const REPEATS = ["That's", 'Once more,', 'Again,', 'I repeat,', 'Once again,', 'That was', 'Repeating,', 'One more time,'];
-let lastRepeat = -1;
-function callWords(n) {
-  let i;
-  do i = rng.int(REPEATS.length); while (i === lastRepeat);
-  lastRepeat = i;
-  const call = `${LETTERS[colOf(n)]} ${n}`;
-  return [`${call}.`, `${REPEATS[i]} ${call}.`];
+
+// Announcer styles: how a call is first said, how it's repeated, the cheeky repeats used when "Salty" is on, and the
+// panel's voice sample. In the phrases, {c} is the call ("B 13"), {L} its letter and {n} its number. Salty lines tease,
+// but with no cussing and nothing aimed at anyone in particular.
+const STYLES = {
+  classic: {
+    name: 'Classic',
+    first: ['{c}.'],
+    repeats: [
+      "That's {c}.", 'Once more, {c}.', 'Again, {c}.', 'I repeat, {c}.', 'Once again, {c}.', 'That was {c}.',
+      'Repeating, {c}.', 'One more time, {c}.', 'Under the {L}, {n}.', 'Look for {c}.', 'Check your cards for {c}.',
+      'Do you have {c}?', 'In case you missed it, {c}.', 'If you have it, dab it. {c}.', 'Mark it if you have it. {c}.',
+    ],
+    salty: [
+      'Are you even listening? {c}.', 'For the folks in the back. {c}!', 'Put the phone down. {c}.', 'Did I stutter? {c}.',
+      'Read my lips. {c}.', 'Wake up people! {c}.', 'Hello? Anybody home? {c}.', 'Clean out those ears. {c}.',
+      'Try to keep up. {c}.', "I'm only saying this twice. {c}.", 'Eyes on your cards! {c}.', 'Not saying it again! {c}.',
+      'Less chatting more dabbing. {c}.', 'Ahem. {c}.', 'Seriously folks. {c}.', 'You snooze you lose. {c}.',
+      'Stay with me now. {c}.', "I'll wait. {c}.", 'Still with us? {c}.', 'Pens down ears up. {c}.',
+    ],
+    sample: ['B. I. N. G. O.', 'Play bingo!'],
+    saltyOn: 'Salty mode on. Try to keep up.',
+  },
+  pirate: {
+    name: 'Pirate',
+    tip: 'Arr! Try a UK, Irish or Scottish voice with the pitch turned down a little.',
+    first: ['{c}!', '{c}!', 'Arr, {c}!', 'Ahoy! {c}!', '{c}, me hearties!', 'Yo ho! {c}!'],
+    repeats: [
+      'That be {c}.', 'Once more me hearties. {c}.', 'Mark yer cards mateys. {c}.', 'Under the {L} number {n}, arr.',
+      'Ye heard me right. {c}.', 'Check yer treasure maps for {c}.', 'Arr that be {c}!', 'X marks the spot. {c}.',
+      'Look sharp for {c}.', 'Yo ho ho, {c}.', 'Say it with me mateys. {c}.', 'Dab it if ye got it. {c}.',
+      'Again, for the crew. {c}.', 'Steady as she goes. {c}.',
+    ],
+    salty: [
+      'Clean the barnacles out of yer ears! {c}.', 'Are ye even listenin\' ye bilge rats? {c}.', 'Look alive ye landlubbers! {c}.',
+      'Put down the grog! {c}.', 'Did I stutter, matey? {c}.', 'Wake up or walk the plank! {c}.', 'Swab yer ears ye scallywags! {c}.',
+      'By Davy Jones I\'ll not say it a third time! {c}.', 'Eyes on yer cards not the parrot! {c}.', 'Shiver me timbers pay attention! {c}.',
+      'Stop yer jabberin\' and dab! {c}.', 'Ahoy sleepyheads! {c}.', 'All hands on deck! {c}.', 'Even the parrot heard that one. {c}.',
+    ],
+    sample: ['B. I. N. G. O.', "Arr! Let's play bingo me hearties!"],
+    saltyOn: 'Salty mode on ye scallywags!',
+  },
+  groovy: {
+    name: 'Groovy, baby',
+    tip: 'Yeah baby! A UK English voice suits this one best.',
+    first: ['{c}.', '{c}, baby!', 'Yeah baby! {c}!', '{c}. Groovy!', 'Oh yeah! {c}!', 'Smashing! {c}!'],
+    repeats: [
+      'Yeah baby! {c}.', "Groovy baby, that's {c}.", 'Dig it. {c}.', 'Smashing! {c}.', "Far out, it's {c}.",
+      'Groovy! {c}!', 'Feel the groove. {c}.', "One more time, baby. {c}.", 'Outta sight! {c}.', 'Check your cards, baby. {c}.',
+      "Behave! It's {c}.", 'Under the {L}, number {n} baby.', 'Mark it baby! {c}.', 'Yeah! {c}!',
+    ],
+    salty: [
+      'Oh, behave! {c}.', 'Are you even listening, baby? {c}.', "Don't be a square! {c}.", 'Get your mojo working baby! {c}.',
+      "Put the phone down, it's not 1969! {c}.", 'Focus baby, focus! {c}.', 'Do try to keep up baby. {c}.',
+      'Groovy, if you were awake. {c}.', 'Hello? Earth to the swinging sixties! {c}.', "Wake up kittens, it's {c}.",
+      'Not groovy baby. Pay attention! {c}.', 'Yeah baby, yeah! Eyes on your cards! {c}.',
+    ],
+    sample: ['B. I. N. G. O.', "Let's play bingo baby! Yeah!"],
+    saltyOn: 'Salty mode on. Oh behave!',
+  },
+};
+// With "Random style" on, calls are mostly Classic and the rest are a whole call (first line and repeat) in another style.
+const RANDOM_STYLE_PCT = 30;
+const announcerStyle = () => DB.settings.randomStyle ? STYLES.classic : STYLES[DB.settings.style] || STYLES.classic;
+function callStyle() {
+  if (!DB.settings.randomStyle || rng.int(100) >= RANDOM_STYLE_PCT) return announcerStyle();
+  const others = Object.values(STYLES).filter(s => s !== STYLES.classic);
+  return others[rng.int(others.length)];
 }
+
+const SALTY_SHARE = 2;          // with Salty on, 1 repeat in 2 is salty
+const OLD_SCHOOL_ODDS = 12;     // about 1 repeat in 12 is the traditional letter-and-digits ("B, one, three")
+const lastPick = {};
+const opener = t => t.split(/[\s!,.?]/)[0];
+/** A random phrase from the pool, never the same one twice running for that kind,
+    and (for a repeat) not opening with the same word as the first line, so "Yeah, baby!" isn't followed by "Yeah!". */
+function pickPhrase(kind, pool, after = '') {
+  const ok = pool.filter(t => t !== lastPick[kind] && opener(t) !== opener(after));
+  const from = ok.length ? ok : pool;
+  return lastPick[kind] = from[rng.int(from.length)];
+}
+function callWords(n) {
+  const s = callStyle(), L = LETTERS[colOf(n)], call = `${L} ${n}`;
+  const fill = t => t.replace(/\{c\}/g, call).replace(/\{L\}/g, L).replace(/\{n\}/g, n);
+  const lead = pickPhrase('first', s.first), first = fill(lead);
+  if (n > 9 && rng.int(OLD_SCHOOL_ODDS) === 0) return [first, `${L}, ${String(n).split('').join(', ')}.`];
+  const salty = DB.settings.salty && rng.int(SALTY_SHARE) === 0;
+  return [first, fill(pickPhrase(salty ? 'salty' : 'repeat', salty ? s.salty : s.repeats, lead))];
+}
+const sampleWords = () => announcerStyle().sample;
 function speak(n) {
   if (DB.settings.voice) say(...callWords(n));
 }
@@ -1094,41 +1180,72 @@ function voiceOptions() {
     (mine.length ? `<optgroup label="${esc(navigator.language || 'Your language')}">${mine.map(opt).join('')}</optgroup>` : '') +
     (rest.length ? `<optgroup label="Other languages">${rest.map(opt).join('')}</optgroup>` : '');
 }
+const autoCalling = () => V.kind === 'game' && DB.settings.auto && V.g.state === 'playing';
 async function announcerSettings() {
   const st = DB.settings;
   const refresh = () => { const sel = $('dialog select[name=voice]'); if (sel) sel.innerHTML = voiceOptions(); };
   if (canSpeak) speechSynthesis.addEventListener('voiceschanged', refresh);
+  const stepper = (key, label, less, more) => `<div class="switchrow"><span>${label}</span><div class="stepper">
+      <button type="button" class="iconbtn" data-tune="${key}" data-dir="-1" aria-label="${less}">−</button>
+      <output id="${key}Out" aria-live="polite"></output>
+      <button type="button" class="iconbtn" data-tune="${key}" data-dir="1" aria-label="${more}">+</button></div></div>`;
   await modal({
     title: 'Announcer',
-    body: canSpeak ? `<label class="switchrow"><span>Announce calls aloud</span><input type="checkbox" class="switch" name="on"${st.voice ? ' checked' : ''}></label>
+    body: canSpeak ? `${autoCalling() ? '<p class="hint">A game is calling. Changes take effect from the next call.</p>' : ''}
+      <label class="switchrow"><span>Announce calls aloud</span><input type="checkbox" class="switch" name="on"${st.voice ? ' checked' : ''}></label>
+      <label class="field"><span>Style</span><select name="style">${Object.entries(STYLES).map(([k, s]) =>
+        `<option value="${k}"${k === (STYLES[st.style] ? st.style : 'classic') ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
+      <p class="hint" id="styleTip"></p>
+      <label class="switchrow"><span>Random style<small>Mostly Classic, with about ${RANDOM_STYLE_PCT}% of calls in another style.</small></span><input type="checkbox" class="switch" name="randomStyle"${st.randomStyle ? ' checked' : ''}></label>
+      <label class="switchrow"><span>Salty repeats<small>Cheeky repeats like “Are you even listening?” No cussing.</small></span><input type="checkbox" class="switch" name="salty"${st.salty ? ' checked' : ''}></label>
       <label class="field"><span>Voice</span><select name="voice">${voiceOptions()}</select></label>
-      <div class="switchrow"><span>Speed</span><div class="stepper">
-        <button type="button" class="iconbtn" data-rate="-1" aria-label="Slower">−</button>
-        <output id="rateOut" aria-live="polite">${fmtRate(voiceRate())}</output>
-        <button type="button" class="iconbtn" data-rate="1" aria-label="Faster">+</button></div></div>
+      ${stepper('rate', 'Speed', 'Slower', 'Faster')}
+      ${stepper('pitch', 'Pitch', 'Lower', 'Higher')}
       <button type="button" class="btn" data-preview>${ICON.voice} Preview</button>
-      <p class="hint">Numbers outside the game's pattern light up on the board without being announced. Voices come from this device; on iPad, more can be downloaded under Settings › Accessibility › Spoken Content › Voices.</p>`
+      <p class="hint">Speed and pitch are remembered for each voice. Numbers outside the game's pattern light up on the board without being announced. Voices come from this device; on iPad, more can be downloaded under Settings › Accessibility › Spoken Content › Voices.</p>`
       : '<p>This browser has no speech support.</p>',
     buttons: [{ label: 'Done', value: 'ok', cls: 'primary' }],
     init: d => {
-      $('input[name=on]', d)?.addEventListener('change', e => {
-        st.voice = e.target.checked; save();
-        if (st.voice) say('Announcer on.'); else stopSpeech();
-      });
-      const showRate = () => {
-        const r = voiceRate();
-        $('#rateOut', d).textContent = fmtRate(r);
-        $('[data-rate="-1"]', d).disabled = r <= RATE_MIN + 1e-9;
-        $('[data-rate="1"]', d).disabled = r >= RATE_MAX - 1e-9;
+      if (!canSpeak) return;
+      // Samples would talk over (and cut off) the game's calls, so while it's calling the next call is the sample.
+      const sample = (...parts) => { if (!autoCalling()) say(...parts); };
+      const TUNE = {
+        rate: { get: voiceRate, store: st.voiceRates, min: RATE_MIN, max: RATE_MAX },
+        pitch: { get: voicePitch, store: st.voicePitches, min: PITCH_MIN, max: PITCH_MAX },
       };
-      if (canSpeak) showRate();
-      $('select[name=voice]', d)?.addEventListener('change', e => { st.voiceURI = e.target.value || null; save(); showRate(); say(...callWords(7)); });
-      for (const b of $$('[data-rate]', d)) b.addEventListener('click', () => {
-        const r = Math.round((voiceRate() + +b.dataset.rate * RATE_STEP) * 100) / 100;
-        st.voiceRates[st.voiceURI || ''] = Math.min(RATE_MAX, Math.max(RATE_MIN, r)); save();
-        showRate(); say(...callWords(1 + rng.int(75)));
+      const show = () => {
+        for (const [key, t] of Object.entries(TUNE)) {
+          const v = t.get();
+          $(`#${key}Out`, d).textContent = fmtPct(v);
+          $(`[data-tune=${key}][data-dir="-1"]`, d).disabled = v <= t.min + 1e-9;
+          $(`[data-tune=${key}][data-dir="1"]`, d).disabled = v >= t.max - 1e-9;
+        }
+        const tip = $('#styleTip', d);
+        tip.textContent = announcerStyle().tip || '';
+        tip.hidden = !tip.textContent;
+        $('select[name=style]', d).disabled = !!st.randomStyle;
+      };
+      show();
+      $('input[name=on]', d).addEventListener('change', e => {
+        st.voice = e.target.checked; save();
+        if (st.voice) sample('Announcer on.'); else stopSpeech();
       });
-      $('[data-preview]', d)?.addEventListener('click', () => say(...callWords(1 + rng.int(75))));
+      $('select[name=style]', d).addEventListener('change', e => { st.style = e.target.value; save(); show(); sample(...sampleWords()); });
+      $('input[name=randomStyle]', d).addEventListener('change', e => {
+        st.randomStyle = e.target.checked; save(); show();
+        sample(st.randomStyle ? 'Random style on. Expect the unexpected!' : 'Random style off.');
+      });
+      $('input[name=salty]', d).addEventListener('change', e => {
+        st.salty = e.target.checked; save();
+        sample(st.salty ? announcerStyle().saltyOn : 'Salty mode off.');
+      });
+      $('select[name=voice]', d).addEventListener('change', e => { st.voiceURI = e.target.value || null; save(); show(); sample(...sampleWords()); });
+      for (const b of $$('[data-tune]', d)) b.addEventListener('click', () => {
+        const t = TUNE[b.dataset.tune], v = Math.round((t.get() + +b.dataset.dir * TUNE_STEP) * 100) / 100;
+        t.store[voiceKey()] = Math.min(t.max, Math.max(t.min, v)); save();
+        show(); sample(...sampleWords());
+      });
+      $('[data-preview]', d).addEventListener('click', () => say(...sampleWords()));
     },
   });
   if (canSpeak) speechSynthesis.removeEventListener('voiceschanged', refresh);
