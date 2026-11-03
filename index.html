@@ -266,7 +266,10 @@ h2 { font-size: 20px; margin: 0 0 12px; }
 /* Short screens (phones in landscape) */
 @media (max-height: 560px) {
   .game { gap: 8px; }
-  .stage .recent, .stage .legend { display: none; }
+  .stage .legend { display: none; }
+  .meta { flex-direction: row; align-items: center; gap: 14px; }
+  .count { white-space: nowrap; }
+  .recent, .recent .ball { --s: 44px; min-height: 44px; }
   .cur .ball { --s: 64px; }
   .patbox .pat { width: 64px; } .patbox span { display: none; }
   .clock { font-size: 22px; }
@@ -665,11 +668,13 @@ app.addEventListener('click', e => {
 });
 
 // ---------- Home: sessions ----------
+const voiceBtn = () => `<button class="iconbtn" data-act="voice" aria-pressed="${DB.settings.voice}" aria-label="Announcer settings" title="Announcer">${DB.settings.voice ? ICON.voice : ICON.mute}</button>`;
 function renderHome() {
   V = { kind: 'home' };
   const ss = [...DB.sessions].sort((a, b) => b.createdAt - a.createdAt);
   app.innerHTML = `<div class="page">
     <header class="phead"><div class="brand grow">${ballHTML(7)}<h1>Bingo Caller</h1></div>
+      ${voiceBtn()}
       ${ss.length ? '<button class="btn primary" data-act="new-session">＋ New session</button>' : ''}</header>
     ${ss.length ? `<div class="section-h">Sessions</div><div class="list">${ss.map(sessionRow).join('')}</div>` : `
       <div class="empty">${ballHTML(42)}<h2>No sessions yet</h2>
@@ -696,7 +701,7 @@ function renderSession(s) {
   V = { kind: 'session', s };
   const games = s.gameIds.map(id => DB.games[id]).filter(Boolean);
   app.innerHTML = `<div class="page">
-    <header class="phead"><a class="back" href="#/">‹ <span>Sessions</span></a></header>
+    <header class="phead"><a class="back" href="#/">‹ <span>Sessions</span></a><div class="grow"></div>${voiceBtn()}</header>
     <div class="titlerow"><h1>${esc(s.name)}</h1>
       <button class="iconbtn" data-act="rename-session" aria-label="Rename session">${ICON.edit}</button>
       <button class="btn danger" data-act="delete-session">Delete</button></div>
@@ -734,10 +739,11 @@ function renderPicker(s) {
   app.innerHTML = `<div class="page">
     <header class="phead"><a class="back" href="#/s/${s.id}">‹ <span>${esc(s.name)}</span></a></header>
     <div class="titlerow"><h1>Choose a game</h1></div>
-    <div class="pgrid">${BUILTIN.map(card).join('')}</div>
     <div class="section-h">Your patterns</div>
-    <div class="pgrid">${DB.patterns.map(card).join('')}
-      <button class="pcard add" data-act="new-pattern"><span class="plus">＋</span>Create a pattern</button></div>
+    <div class="pgrid"><button class="pcard add" data-act="new-pattern"><span class="plus">＋</span>Create a pattern</button>
+      ${DB.patterns.map(card).join('')}</div>
+    <div class="section-h">Standard patterns</div>
+    <div class="pgrid">${BUILTIN.map(card).join('')}</div>
   </div>`;
 }
 ACT.pick = t => {
@@ -876,8 +882,7 @@ function renderControls() {
       <button data-act="mode" data-v="manual" aria-pressed="${!st.auto}">Manual</button>
       <button data-act="mode" data-v="auto" aria-pressed="${st.auto}">Automatic</button></div>`;
   const interval = st.auto ? `<label class="interval">Every <input type="range" id="interval" min="6" max="30" step="1" value="${st.interval}" aria-label="Seconds between calls"><output id="intervalOut">${st.interval}s</output></label>` : '';
-  const voice = `<button class="iconbtn" data-act="voice" aria-pressed="${st.voice}" aria-label="Announcer settings" title="Announcer">${st.voice ? ICON.voice : ICON.mute}</button>`;
-  const settings = `<div class="grp">${mode}${interval}${voice}</div><div class="spacer"></div>`;
+  const settings = `<div class="grp">${mode}${interval}${voiceBtn()}</div><div class="spacer"></div>`;
   const done = g.calls.length >= 75;
   if (g.state === 'ready') {
     el.innerHTML = settings;
@@ -890,7 +895,7 @@ function renderControls() {
     el.innerHTML = settings + `<div class="grp">
       <button class="btn" data-act="pause">${playing ? ICON.pause + ' Pause' : ICON.play + ' Resume'}</button>
       <button class="btn primary big" data-act="call" ${done ? 'disabled' : ''}>${st.auto && playing ? 'Call now' : 'Call next'}</button>
-      <button class="btn win big" data-act="bingo">Bingo!</button></div>
+      ${st.auto ? '<button class="btn win big" data-act="bingo">Bingo!</button>' : '<button class="btn win big" data-act="end-game">End game</button>'}</div>
       <div class="autobar" aria-hidden="true"><i id="autobar"></i></div>` + (V.confirming ? `
       <div class="confirm" role="group" aria-label="Confirm bingo">
         <div class="ctext"><b>Bingo called!</b><span>Check the card against the board. Calls are on hold.</span></div>
@@ -1250,6 +1255,8 @@ async function announcerSettings() {
   });
   if (canSpeak) speechSynthesis.removeEventListener('voiceschanged', refresh);
   if (V.kind === 'game') renderControls();
+  else if (V.kind === 'home') renderHome();
+  else if (V.kind === 'session') renderSession(V.s);
 }
 
 // Keep the screen awake while a game is on screen (where supported).
@@ -1276,7 +1283,8 @@ ACT.mode = t => {
   renderControls(); scheduleAuto();
 };
 ACT.voice = announcerSettings;
-// Bingo is confirmed in the control strip so the board stays in view (and the scrubber usable) while a card is checked.
+// With automatic calling, Bingo holds the calls and is confirmed in the control strip, so the board stays in view
+// (and the scrubber usable) while a card is checked. With manual calling nothing needs holding, so End game just ends it.
 ACT.bingo = () => {
   V.flight?.finish();
   stopSpeech();
@@ -1287,12 +1295,19 @@ ACT['bingo-no'] = () => {
   V.confirming = false;
   renderControls(); scheduleAuto();
 };
-ACT['bingo-yes'] = () => {
+function endGame() {
   const g = V.g;
   V.confirming = false; V.scrub = null;
   clearAuto();
   g.elapsedMs = elapsed(g); g.runningSince = null; g.state = 'over'; g.endedAt = Date.now(); save();
+}
+ACT['bingo-yes'] = () => {
+  endGame();
   renderControls(); updateGame(); updateClock();
+};
+ACT['end-game'] = () => {
+  endGame();
+  go(`#/s/${V.s.id}/pick`);
 };
 ACT.continue = () => {
   const g = V.g;
